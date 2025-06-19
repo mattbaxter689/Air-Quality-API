@@ -1,6 +1,6 @@
 .venv/
 __pycache__/
 .env
-./mlruns
+mlruns/
 processor/preprocessing_pipeline.joblib
 logs/weather_api.log
