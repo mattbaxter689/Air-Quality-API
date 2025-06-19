@@ -1,0 +1,16 @@
+services:
+  weather_api:
+    build: .
+    container_name: weather_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs  # Mount logs folder from host to container
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - torch_weather_mlflow-net
+
+networks:
+  torch_weather_mlflow-net:
+    external: true

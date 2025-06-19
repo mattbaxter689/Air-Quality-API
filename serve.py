@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 import mlflow.pytorch
-from api.base_models.models import AirQuality
+from api.base_models.models import AirQuality, PredictionResult
 from pydantic import ValidationError
 import mlflow.pytorch
 import mlflow
@@ -18,6 +18,7 @@ from typing import AsyncGenerator
 from dotenv import load_dotenv
 import joblib
 import numpy as np
+import os
 
 model_cache = {}
 cache_lock = Lock()
@@ -26,8 +27,10 @@ load_dotenv()
 
 
 def load_mlflow_model() -> tuple[nn.Module, Pipeline]:
-    mlflow.set_tracking_uri("http://localhost:5000")
-    client = mlflow.tracking.MlflowClient(tracking_uri="http://localhost:5000")
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URL"))
+    client = mlflow.tracking.MlflowClient(
+        tracking_uri=os.getenv("MLFLOW_TRACKING_URL")
+    )
     registered_model_name = "air_quality"
     # Get all versions for this model
     all_versions = client.search_model_versions(
@@ -101,20 +104,22 @@ async def test() -> None:
     summary="Forecast next hour's qir quality, using last 12 hours worth of time points",
     description="Predicts the next hour's air quality using the last 12 hours worth of air quality data",
 )
-async def predict(input: AirQuality) -> dict[str, float]:
+async def predict(input: AirQuality) -> PredictionResult:
 
     if len(input.sequence) != 12:
         logger.error(
             f"Data did not contain exactly 12 time points. Contained: {len(input.sequence)}"
         )
-        return {"error": "Input series must contain exactly 12 time points"}
+        raise ValueError(
+            f"Data must contain exactly 12 points, contained {len(input.sequence)}"
+        )
 
     try:
         logger.info("Validating input with Base Model")
         AirQuality.model_validate(input)
     except ValidationError as e:
         logger.error(f"Validation error on input data: {e}")
-        return {"error": e}
+        raise e
 
     with cache_lock:
         model = model_cache.get("model")
@@ -145,6 +150,18 @@ async def predict(input: AirQuality) -> dict[str, float]:
         predicted_inverse = np.expm1(predicted_value)
         logger.info(f"Predicted air quality: {predicted_inverse}")
 
-        return {"prediction": predicted_inverse}
+        return PredictionResult(prediction=predicted_inverse)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/health")
+async def health_check():
+    with cache_lock:
+        model_loaded = "model" in model_cache
+        preprocessor_loaded = "preprocessor" in model_cache
+
+    if model_loaded and preprocessor_loaded:
+        return {"status": "ok"}
+    else:
+        return {"status": "unavailable"}

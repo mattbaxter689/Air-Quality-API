@@ -40,3 +40,9 @@ class AirQuality(BaseModel):
     sequence: List[AirQualityHourly] = Field(
         description="List of 12 consecutive time points used to forecast next hour's air quality"
     )
+
+
+class PredictionResult(BaseModel):
+    prediction: float = Field(
+        description="Predicted Air Quality returned from PyTorch LSTM model"
+    )
