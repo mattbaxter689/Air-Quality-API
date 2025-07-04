@@ -9,8 +9,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     networks:
-      - torch_weather_mlflow-net
+      - rust_kafka_kafka-net
 
 networks:
-  torch_weather_mlflow-net:
+  rust_kafka_kafka-net:
     external: true
