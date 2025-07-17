@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch
 from api.logger.init_logger import create_logger
 from sklearn.pipeline import Pipeline
+from sklearn import set_config
 import asyncio
 import pandas as pd
 from contextlib import asynccontextmanager
@@ -24,6 +25,7 @@ model_cache = {}
 cache_lock = Lock()
 logger = create_logger(name="weather_api")
 load_dotenv()
+set_config(transform_output="pandas")
 
 
 def load_mlflow_model() -> tuple[nn.Module, Pipeline]:
@@ -106,12 +108,12 @@ async def test() -> None:
 )
 async def predict(input: AirQuality) -> PredictionResult:
 
-    if len(input.sequence) != 12:
+    if len(input.sequence) != 16:
         logger.error(
-            f"Data did not contain exactly 12 time points. Contained: {len(input.sequence)}"
+            f"Data did not contain exactly 16 time points. Contained: {len(input.sequence)}"
         )
         raise ValueError(
-            f"Data must contain exactly 12 points, contained {len(input.sequence)}"
+            f"Data must contain exactly 16 points, contained {len(input.sequence)}"
         )
 
     try:
@@ -134,23 +136,36 @@ async def predict(input: AirQuality) -> PredictionResult:
         df = pd.DataFrame(
             [item.model_dump() for item in input.sequence]
         ).rename(columns={"time": "_time"})
+        df = df.sort_values(by="_time", ascending=True)
 
         # Apply preprocessing and create tensor
         logger.info("Transforming data and creating pytorch tensor")
         transformed = preprocessor.transform(df)
-        tensor_input = torch.tensor(
-            transformed, dtype=torch.float32
+        future_cols = [
+            col for col in transformed.columns if "cos" in col or "sin" in col
+        ]
+        past_cols = [
+            col for col in transformed.columns if col not in future_cols
+        ]
+
+        past_tensor = torch.tensor(
+            transformed.iloc[:12][past_cols].values, dtype=torch.float32
+        ).unsqueeze(0)
+
+        future_tensor = torch.tensor(
+            transformed.iloc[-4:][future_cols].values, dtype=torch.float32
         ).unsqueeze(0)
 
         logger.info("Getting prediction")
         model.eval()
         with torch.no_grad():
-            prediction = model(tensor_input)
-        predicted_value = prediction.item()
-        predicted_inverse = np.expm1(predicted_value)
-        logger.info(f"Predicted air quality: {predicted_inverse}")
+            prediction = model(past_tensor, future_tensor)
+        predicted_inverse = np.expm1(prediction)
+        logger.info(
+            f"Forecasted 4-hour air quality: {predicted_inverse.tolist()}"
+        )
+        return PredictionResult(prediction=predicted_inverse.tolist())
 
-        return PredictionResult(prediction=predicted_inverse)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
