@@ -167,6 +167,7 @@ async def predict(input: AirQuality) -> PredictionResult:
         return PredictionResult(prediction=predicted_inverse.tolist())
 
     except Exception as e:
+        logger.error(f"Error generating predictions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
