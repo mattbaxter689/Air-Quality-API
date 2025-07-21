@@ -15,6 +15,14 @@ Assoicated with the predict endpoint, we have a custom pydantic model that requi
 ### Performance
 As I said, since we cache the model at startup, we greatly reduce the amount of time taken to generate predictions. Rather than taling several seconds to load a model, we can transform the input and return the prediction from the model in around 1 second. This is great for systems where performance could be key. Not just for air quality, but any application where predictions and performance are critical. This system allows for extremely rapid response, ensuring that end-users do not need to wait long before they get their predictions.
 
+### Rate-Limiting and API Keys
+Now, when deploying this API we would understandably want something to handle some sort of load-balancing or rate-limiting to prevent the API from being overloaded with 
+API requests. We could either implement something within the API ourselves, or make use of something like Nginx to handle this automatically for us. I would like to add something
+like this to this API, but I want to investigate which solution I would like to include more.
+
+If we wanted to keep track of which users are sending in requests to the API, along with the data being sent along with the request, we could generate API keys on a per-user basis and store 
+the resulting information in a database. This way, we could perform additional analysis on what data users are sending, what the output of the request is, what users are sending the most requests, etc.
+
 ### Example Request and Output
 For the model, suppose we supply a sequence of time points like the following:
 
