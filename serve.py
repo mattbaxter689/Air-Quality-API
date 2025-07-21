@@ -29,10 +29,12 @@ set_config(transform_output="pandas")
 
 
 def load_mlflow_model() -> tuple[nn.Module, Pipeline]:
+    print(os.getenv("MLFLOW_TRACKING_URL"))
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URL"))
     client = mlflow.tracking.MlflowClient(
         tracking_uri=os.getenv("MLFLOW_TRACKING_URL")
     )
+    print(client)
     registered_model_name = "air_quality"
     # Get all versions for this model
     all_versions = client.search_model_versions(
