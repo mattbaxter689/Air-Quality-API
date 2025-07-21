@@ -4,3 +4,8 @@ __pycache__/
 mlruns/
 processor/preprocessing_pipeline.joblib
 logs/weather_api.log
+*.tfvars
+terraform.tfstate.backup
+terraform.tfstate
+.terraform.lock.hcl
+.terraform/
