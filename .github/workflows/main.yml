@@ -28,19 +28,19 @@ jobs:
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest .
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest
 
-  # deploy:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Set up Google Cloud SDK
-  #       uses: google-github-actions/setup-gcloud@v1
-  #       with:
-  #         project_id: ${{ secrets.GCP_PROJECT_ID }}
-  #         service_account_key: ${{ secrets.GCLOUD_SERVICE_KEY }}
-  #         export_default_credentials: true
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCLOUD_SERVICE_KEY }}
+          export_default_credentials: true
   
-  #     - name: SSH and deploy on GCE instance
-  #       run: |
-  #         gcloud compute ssh ${{ secrets.GCP_INSTANCE_NAME }} \
-  #           --zone=${{ secrets.GCP_COMPUTE_ZONE }} \
-  #           --command="sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest && sudo docker stop weather_api || true && sudo docker rm weather_api || true && sudo docker run -d --name weather_api -p 8000:8000 --network=${{secrets.DOCKER_NETWORK}} ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest"
+      - name: SSH and deploy on GCE instance
+        run: |
+          gcloud compute ssh ${{ secrets.GCP_INSTANCE_NAME }} \
+            --zone=${{ secrets.GCP_COMPUTE_ZONE }} \
+            --command="sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest && sudo docker stop weather_api || true && sudo docker rm weather_api || true && sudo docker run -d --name weather_api -p 8000:8000 ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest"
     
