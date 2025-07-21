@@ -40,6 +40,7 @@ def load_mlflow_model() -> tuple[nn.Module, Pipeline]:
     all_versions = client.search_model_versions(
         f"name='{registered_model_name}'"
     )
+    print([v for v in all_versions])
     # Filter by your custom tag 'status' == 'Production'
     production_versions = [v for v in all_versions]
     for v in production_versions:
