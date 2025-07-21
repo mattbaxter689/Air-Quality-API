@@ -29,12 +29,11 @@ set_config(transform_output="pandas")
 
 
 def load_mlflow_model() -> tuple[nn.Module, Pipeline]:
-    print(os.getenv("MLFLOW_TRACKING_URL"))
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URL"))
     client = mlflow.tracking.MlflowClient(
         tracking_uri=os.getenv("MLFLOW_TRACKING_URL")
     )
-    print(client)
+    print(client.tracking_uri)
     registered_model_name = "air_quality"
     # Get all versions for this model
     all_versions = client.search_model_versions(
@@ -86,6 +85,7 @@ async def refresh_model() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info("Loading model and preprocessor on API startup")
+    print(os.getenv("MLFLOW_TRACKING_URL"))
     model, preprocessor = load_mlflow_model()
     with cache_lock:
         model_cache["model"] = model

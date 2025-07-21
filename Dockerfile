@@ -16,7 +16,7 @@ RUN uv sync
 
 # Copy the rest of your app
 COPY . .
-COPY .env .
+
 # Expose port for app (e.g., FastAPI on port 8000)
 EXPOSE 8000
 
