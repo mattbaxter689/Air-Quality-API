@@ -39,10 +39,17 @@ jobs:
           service_account_key: ${{ secrets.GCLOUD_SERVICE_KEY }}
           export_default_credentials: true
   
+      - name: Authenticate explicitly with service account
+        run: |
+          echo "${{ secrets.GCLOUD_SERVICE_KEY }}" > /tmp/gcloud-key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcloud-key.json
+          gcloud config set account $(jq -r '.client_email' /tmp/gcloud-key.json)
+
       - name: SSH and deploy on GCE instance
         run: |
-          gcloud compute ssh ${{ secrets.GCP_USERNAME }}@${{ secrets.GCP_VM_NAME }} \
+          gcloud compute ssh ${{ secrets.GCP_VM_USERNAME }}@${{ secrets.GCP_VM_NAME }} \
             --zone=${{ secrets.GCP_COMPUTE_ZONE }} \
+            --quiet \
             --command="sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest && \
                        sudo docker stop weather_api || true && \
                        sudo docker rm weather_api || true && \
