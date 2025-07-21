@@ -40,7 +40,9 @@ jobs:
   
       - name: SSH and deploy on GCE instance
         run: |
-          gcloud compute ssh ${{ secrets.GCP_INSTANCE_NAME }} \
+          gcloud compute ssh ${{ secrets.GCP_VM_NAME }} \
             --zone=${{ secrets.GCP_COMPUTE_ZONE }} \
-            --command="sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest && sudo docker stop weather_api || true && sudo docker rm weather_api || true && sudo docker run -d --name weather_api -p 8000:8000 ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest"
-    
+            --command="sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest && \
+                       sudo docker stop weather_api || true && \
+                       sudo docker rm weather_api || true && \
+                       sudo docker run -d --name weather_api -p 8000:8000 ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPOSITORY }}:latest"
