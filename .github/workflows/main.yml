@@ -39,8 +39,8 @@ jobs:
           service_account_key: ${{ secrets.GCLOUD_SERVICE_KEY }}
           export_default_credentials: true
 
-      - name: Set active account explicitly
-        run: gcloud config set account ${{ fromJson(secrets.GCLOUD_SERVICE_KEY).client_email }}
+      # - name: Set active account explicitly
+      #   run: gcloud config set account ${{ fromJson(secrets.GCLOUD_SERVICE_KEY).client_email }}
 
       - name: SSH and deploy on GCE instance
         run: |
