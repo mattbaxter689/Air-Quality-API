@@ -41,7 +41,7 @@ jobs:
   
       - name: Authenticate explicitly with service account
         run: |
-          echo "${{ secrets.GCLOUD_SERVICE_KEY }}" > /tmp/gcloud-key.json
+          printf '%s' "${{ secrets.GCLOUD_SERVICE_KEY }}" > /tmp/gcloud-key.json
           gcloud auth activate-service-account --key-file=/tmp/gcloud-key.json
           gcloud config set account $(jq -r '.client_email' /tmp/gcloud-key.json)
 
