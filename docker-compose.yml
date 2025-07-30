@@ -1,15 +1,15 @@
 services:
-  # weather_api:
-  #   build: .
-  #   container_name: weather_api
-  #   ports:
-  #     - "8000:8000"
-  #   volumes:
-  #     - ./logs:/app/logs  # Mount logs folder from host to container
-  #   environment:
-  #     - PYTHONUNBUFFERED=1
-  #   networks:
-  #     - rust_kafka_kafka-net
+  weather_api:
+    build: .
+    container_name: weather_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs  # Mount logs folder from host to container
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - rust_kafka_kafka-net
 
   redis:
     image: redis:8.0.3
