@@ -9,3 +9,5 @@ terraform.tfstate.backup
 terraform.tfstate
 .terraform.lock.hcl
 .terraform/
+test_limit.sh
+payload.json

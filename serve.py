@@ -1,23 +1,18 @@
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
-import mlflow.pytorch
 from api.base_models.models import AirQuality, PredictionResult
 from pydantic import ValidationError
-import mlflow.pytorch
-import mlflow
 from threading import Lock
-import time
-import torch.nn as nn
 import torch
 from api.logger.init_logger import create_logger
-from sklearn.pipeline import Pipeline
+from api.middleware.bucket_middleware import TokenBucketMiddleware
+from api.utils.utils import load_mlflow_model
 from sklearn import set_config
 import asyncio
 import pandas as pd
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from dotenv import load_dotenv
-import joblib
 import numpy as np
 import os
 
@@ -26,45 +21,6 @@ cache_lock = Lock()
 logger = create_logger(name="weather_api")
 load_dotenv()
 set_config(transform_output="pandas")
-
-
-def load_mlflow_model() -> tuple[nn.Module, Pipeline]:
-    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URL"))
-    client = mlflow.tracking.MlflowClient(
-        tracking_uri=os.getenv("MLFLOW_TRACKING_URL")
-    )
-    print(client.tracking_uri)
-    registered_model_name = "air_quality"
-    # Get all versions for this model
-    all_versions = client.search_model_versions(
-        f"name='{registered_model_name}'"
-    )
-    print([v for v in all_versions])
-    # Filter by your custom tag 'status' == 'Production'
-    production_versions = [v for v in all_versions]
-    for v in production_versions:
-        logger.info(
-            f"Version: {v.version}, Run ID: {v.run_id}, Source: {v.source}"
-        )
-    if not production_versions:
-        raise RuntimeError("No Production model versions found")
-
-    # Choose the latest version by creation timestamp or version number
-    latest_version = max(
-        production_versions,
-        key=lambda v: int(v.version),  # or v.creation_timestamp if you prefer
-    )
-
-    model_uri = f"models:/{registered_model_name}/{latest_version.version}"
-    model = mlflow.pytorch.load_model(model_uri)
-
-    run_id = latest_version.run_id
-    preprocessor_path = "preprocessing_pipeline.joblib"
-    preprocessor = client.download_artifacts(
-        run_id=run_id, path=preprocessor_path, dst_path="processor"
-    )
-    processor = joblib.load(preprocessor)
-    return model, processor
 
 
 async def refresh_model() -> None:
@@ -85,18 +41,32 @@ async def refresh_model() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info("Loading model and preprocessor on API startup")
-    print(os.getenv("MLFLOW_TRACKING_URL"))
     model, preprocessor = load_mlflow_model()
     with cache_lock:
         model_cache["model"] = model
         model_cache["preprocessor"] = preprocessor
 
-    asyncio.create_task(refresh_model())
+    refresh_task = asyncio.create_task(refresh_model())
     yield
-    logger.info("Shutting down API ...")
+    logger.info("Beginning API shutdown ...")
+
+    refresh_task.cancel()
+    try:
+        await refresh_task
+    except asyncio.CancelledError:
+        logger.info("Background model refresh task cancelled")
+    logger.info("Shutting down API...")
 
 
 app = FastAPI(lifespan=lifespan)
+logger.info("Adding Redis token bucket middleware")
+app.add_middleware(
+    TokenBucketMiddleware,
+    redis_host=os.getenv("REDIS_HOST"),
+    redis_port=6379,
+    bucket_size=10,
+    refill_rate=1,
+)
 
 
 @app.get("/")
@@ -131,7 +101,9 @@ async def predict(input: AirQuality) -> PredictionResult:
         preprocessor = model_cache.get("preprocessor")
 
     if not model or not preprocessor:
-        raise HTTPException(status_code=503, detail="Model not available")
+        raise HTTPException(
+            status_code=503, detail="Model/Processor not available"
+        )
 
     try:
         # Extract features

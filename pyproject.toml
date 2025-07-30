@@ -17,6 +17,8 @@ dependencies = [
     "numpy<2",
     "boto3>=1.38.38",
     "python-dotenv>=1.1.0",
+    "redis>=6.2.0",
+    "asyncio-redis>=0.16.0",
 ]
 
 [tool.uv.sources]
