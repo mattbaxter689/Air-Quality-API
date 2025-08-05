@@ -6,6 +6,7 @@ from threading import Lock
 import torch
 from api.logger.init_logger import create_logger
 from api.middleware.bucket_middleware import TokenBucketMiddleware
+from api.utils.manager import PredictionProcessor
 from api.utils.utils import load_mlflow_model
 from sklearn import set_config
 import asyncio
@@ -19,20 +20,45 @@ import os
 model_cache = {}
 cache_lock = Lock()
 logger = create_logger(name="weather_api")
+
 load_dotenv()
 set_config(transform_output="pandas")
+
+
+class ModelManager:
+    """Manager for model cache"""
+
+    @staticmethod
+    def load_model() -> tuple:
+        """Load model and preprocessor from MLflow"""
+        return load_mlflow_model()
+
+    @staticmethod
+    def cache_model(model, preprocessor) -> None:
+        """Thread-safe model caching"""
+        with cache_lock:
+            model_cache["model"] = model
+            model_cache["preprocessor"] = preprocessor
+
+    @staticmethod
+    def get_model() -> tuple:
+        """Thread-safe model retrieval"""
+        with cache_lock:
+            return model_cache.get("model"), model_cache.get("preprocessor")
+
+    @staticmethod
+    def is_model_available() -> bool:
+        """Check if model and preprocessor are loaded"""
+        with cache_lock:
+            return "model" in model_cache and "preprocessor" in model_cache
 
 
 async def refresh_model() -> None:
     while True:
         await asyncio.sleep(3600)
         try:
-            model, preprocessor = load_mlflow_model()
-
-            with cache_lock:
-                model_cache["model"] = model
-                model_cache["preprocessor"] = preprocessor
-
+            model, preprocessor = ModelManager.load_model()
+            ModelManager.cache_model(model, preprocessor)
             logger.info("Model refreshed")
         except Exception as e:
             logger.error(f"Failed to refresh model: {e}")
@@ -41,13 +67,18 @@ async def refresh_model() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info("Loading model and preprocessor on API startup")
-    model, preprocessor = load_mlflow_model()
-    with cache_lock:
-        model_cache["model"] = model
-        model_cache["preprocessor"] = preprocessor
+
+    try:
+        model, preprocessor = ModelManager.load_model()
+        ModelManager.cache_model(model, preprocessor)
+        logger.info("Model loaded on startup successfully")
+    except Exception as e:
+        logger.error(f"Failed to load model on startup: {e}")
 
     refresh_task = asyncio.create_task(refresh_model())
+
     yield
+
     logger.info("Beginning API shutdown ...")
 
     refresh_task.cancel()
@@ -78,27 +109,22 @@ async def test() -> None:
     "/predict",
     summary="Forecast next hour's qir quality, using last 12 hours worth of time points",
     description="Predicts the next hour's air quality using the last 12 hours worth of air quality data",
+    response_model=PredictionResult,
 )
 async def predict(input: AirQuality) -> PredictionResult:
 
-    if len(input.sequence) != 16:
-        logger.error(
-            f"Data did not contain exactly 16 time points. Contained: {len(input.sequence)}"
-        )
-        raise ValueError(
-            f"Data must contain exactly 16 points, contained {len(input.sequence)}"
-        )
+    PredictionProcessor.validate_input_length(input.sequence)
 
     try:
         logger.info("Validating input with Base Model")
         AirQuality.model_validate(input)
     except ValidationError as e:
         logger.error(f"Validation error on input data: {e}")
-        raise e
+        raise HTTPException(
+            status_code=422, detail=f"Input validation failed: {e}"
+        )
 
-    with cache_lock:
-        model = model_cache.get("model")
-        preprocessor = model_cache.get("preprocessor")
+    model, preprocessor = ModelManager.load_model()
 
     if not model or not preprocessor:
         raise HTTPException(
@@ -106,40 +132,24 @@ async def predict(input: AirQuality) -> PredictionResult:
         )
 
     try:
-        # Extract features
-        logger.info("Extracting data")
-        df = pd.DataFrame(
-            [item.model_dump() for item in input.sequence]
-        ).rename(columns={"time": "_time"})
-        df = df.sort_values(by="_time", ascending=True)
+        logger.info("Processing input data")
+        df = PredictionProcessor.prepare_dataframe(input.sequence)
 
-        # Apply preprocessing and create tensor
-        logger.info("Transforming data and creating pytorch tensor")
+        logger.info("Applying preprocessing transformations")
         transformed = preprocessor.transform(df)
-        future_cols = [
-            col for col in transformed.columns if "cos" in col or "sin" in col
-        ]
-        past_cols = [
-            col for col in transformed.columns if col not in future_cols
-        ]
 
-        past_tensor = torch.tensor(
-            transformed.iloc[:12][past_cols].values, dtype=torch.float32
-        ).unsqueeze(0)
-
-        future_tensor = torch.tensor(
-            transformed.iloc[-4:][future_cols].values, dtype=torch.float32
-        ).unsqueeze(0)
-
-        logger.info("Getting prediction")
-        model.eval()
-        with torch.no_grad():
-            prediction = model(past_tensor, future_tensor)
-        predicted_inverse = np.expm1(prediction)
-        logger.info(
-            f"Forecasted 4-hour air quality: {predicted_inverse.tolist()}"
+        logger.info("Creating PyTorch tensors")
+        past_tensor, future_tensor = PredictionProcessor.create_tensors(
+            transformed
         )
-        return PredictionResult(prediction=predicted_inverse.tolist())
+
+        logger.info("Generating prediction")
+        prediction_list = PredictionProcessor.generate_prediction(
+            model, past_tensor, future_tensor
+        )
+
+        logger.info(f"Forecasted 4-hour air quality: {prediction_list}")
+        return PredictionResult(prediction=prediction_list)
 
     except Exception as e:
         logger.error(f"Error generating predictions: {e}")
@@ -148,11 +158,9 @@ async def predict(input: AirQuality) -> PredictionResult:
 
 @app.get("/health")
 async def health_check():
-    with cache_lock:
-        model_loaded = "model" in model_cache
-        preprocessor_loaded = "preprocessor" in model_cache
-
-    if model_loaded and preprocessor_loaded:
-        return {"status": "ok"}
-    else:
-        return {"status": "unavailable"}
+    model_available = ModelManager.is_model_available()
+    return {
+        "status": "healthy" if model_available else "unhealthy",
+        "model_loaded": model_available,
+        "service": "air-quality-prediction",
+    }
