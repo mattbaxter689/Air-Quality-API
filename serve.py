@@ -124,7 +124,7 @@ async def predict(input: AirQuality) -> PredictionResult:
             status_code=422, detail=f"Input validation failed: {e}"
         )
 
-    model, preprocessor = ModelManager.load_model()
+    model, preprocessor = ModelManager.get_model()
 
     if not model or not preprocessor:
         raise HTTPException(
