@@ -11,6 +11,11 @@ logger = logging.getLogger(name="weather_api")
 
 
 def load_mlflow_model() -> tuple[nn.Module, Pipeline]:
+    """
+    Poll MlFlow instance for latest version of promoted models and load
+    to API
+    """
+    
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URL"))
     client = mlflow.tracking.MlflowClient(
         tracking_uri=os.getenv("MLFLOW_TRACKING_URL")
