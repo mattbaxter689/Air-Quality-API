@@ -13,6 +13,10 @@ logger = logging.getLogger("weather_api")
 
 
 class TokenBucketMiddleware(BaseHTTPMiddleware):
+    """
+    Simple Token-bucket middleware that pools all rquests into the same bucket rather
+    than using IP specific middlewares
+    """
 
     def __init__(
         self,
